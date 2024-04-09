@@ -29,19 +29,20 @@ Write-Output "Shutting down VMs"
 $running_vms = $all_vms | Where-Object {$_.State -ne "Off"}
 $running_vms | Stop-VM -AsJob | Receive-Job -Wait -AutoRemoveJob
 
-Write-Output "Removing old differencing disks"
-$disks | Remove-Item
-
-Write-Output "Merging update disk"
-Merge-VHD -Path $update_disk_info.Path -Destination $root_disk.Path
-
-$all_child_disks = $disks + $update_disk
-
-Write-Output "Replacing differencing disks"
-$all_child_disks | New-VHD -ParentPath $root_disk.Path -Differencing
-
-Write-Output "Optimizing disk"
-$root_disk | Optimize-VHD
+try {
+    Write-Output "Removing old differencing disks"
+    $disks | Remove-Item
+    
+    Write-Output "Merging update disk"
+    Merge-VHD -Path $update_disk_info.Path -Destination $root_disk.Path
+    
+    $root_disk | Optimize-VHD -Confirm -Mode Prezeroed
+} finally {
+    $all_child_disks = $disks + $update_disk
+    
+    Write-Output "Replacing differencing disks"
+    $all_child_disks | New-VHD -ParentPath $root_disk.Path -Differencing
+}
 
 Write-Output "Starting stopped VMs"
 $running_vms | Where-Object {$_.Name -ne $update_machine.Name}| Start-VM -AsJob | Receive-Job -Wait -AutoRemoveJob
